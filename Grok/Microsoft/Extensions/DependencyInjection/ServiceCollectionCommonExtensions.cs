@@ -1,4 +1,8 @@
-﻿namespace Microsoft.Extensions.DependencyInjection
+﻿using Grok;
+using JetBrains.Annotations;
+using System.Reflection;
+
+namespace Microsoft.Extensions.DependencyInjection
 {
     public static class ServiceCollectionCommonExtensions
     {
@@ -28,6 +32,52 @@
             }
 
             return service;
+        }
+
+        public static IServiceProvider BuildServiceProviderFromFactory([NotNull] this IServiceCollection services)
+        {
+            Check.NotNull(services, nameof(services));
+
+            foreach (var service in services)
+            {
+                var factoryInterface =
+                    service.NormalizedImplementationInstance()?.GetType()
+                        .GetTypeInfo()
+                        .GetInterfaces()
+                        .FirstOrDefault(i => i.GetTypeInfo().IsGenericType &&
+                        i.GetGenericTypeDefinition() == typeof(IServiceProviderFactory<>));
+
+                if (factoryInterface == null)
+                    continue;
+
+                var containerBuilderType = factoryInterface.GenericTypeArguments[0];
+
+                return (IServiceProvider)typeof(ServiceCollectionCommonExtensions)
+                    .GetTypeInfo()
+                    .GetMethods()
+                    .Single(m => m.Name == nameof(BuildServiceProviderFromFactory) && m.IsGenericMethod)
+                    .MakeGenericMethod(containerBuilderType)
+                    .Invoke(null, [service, null])!;
+            }
+
+            return services.BuildServiceProvider();
+        }
+
+        public static IServiceProvider BuildServiceProviderFromFactory<TContainerBuilder>([NotNull] this IServiceCollection services,
+            Action<TContainerBuilder>? builderAction = null) where TContainerBuilder : notnull
+        {
+            Check.NotNull(services, nameof(services));
+
+            var serviceProviderFactory = services.GetSingletonInstanceOrNull<IServiceProviderFactory<TContainerBuilder>>();
+
+            if (serviceProviderFactory == null)
+            {
+                throw new Exception($"Could not find {typeof(IServiceProviderFactory<TContainerBuilder>).FullName} in {services}.");
+            }
+
+            var builder = serviceProviderFactory.CreateBuilder(services);
+            builderAction?.Invoke(builder);
+            return serviceProviderFactory.CreateServiceProvider(builder);
         }
 
     }

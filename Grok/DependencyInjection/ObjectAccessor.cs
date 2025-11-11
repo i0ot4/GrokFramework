@@ -2,16 +2,16 @@
 {
     public class ObjectAccessor<T> : IObjectAccessor<T>
     {
+        public T? Value { get; set; }
+
         public ObjectAccessor()
         {
 
         }
 
-        public T? Value { get; set; }
-
-        public ObjectAccessor(T value)
+        public ObjectAccessor(T? obj)
         {
-            Value = value;
+            Value = obj;
         }
     }
 }

@@ -4,44 +4,72 @@ namespace Microsoft.Extensions.DependencyInjection
 {
     public static class ServiceCollectionObjectAccessorExtensions
     {
-        public static IServiceCollection AddObjectAccessor<T>(this IServiceCollection services)
+        public static ObjectAccessor<T> TryAddObjectAccessor<T>(this IServiceCollection services)
         {
-            if (!services.Any(s => s.ServiceType == typeof(IObjectAccessor<T>)))
+            if (services.Any(s => s.ServiceType == typeof(ObjectAccessor<T>)))
             {
-                services.AddSingleton<IObjectAccessor<T>, ObjectAccessor<T>>();
+                return services.GetSingletonInstance<ObjectAccessor<T>>();
             }
 
-            return services;
+            return services.AddObjectAccessor<T>();
         }
 
-        public static IServiceCollection AddObjectAccessor<T>(this IServiceCollection services, T obj)
+        public static ObjectAccessor<T> AddObjectAccessor<T>(this IServiceCollection services)
         {
-            if (!services.Any(s => s.ServiceType == typeof(IObjectAccessor<T>)))
+            return services.AddObjectAccessor(new ObjectAccessor<T>());
+        }
+
+        public static ObjectAccessor<T> AddObjectAccessor<T>(this IServiceCollection services, T obj)
+        {
+            return services.AddObjectAccessor(new ObjectAccessor<T>(obj));
+        }
+
+        public static ObjectAccessor<T> AddObjectAccessor<T>(this IServiceCollection services, ObjectAccessor<T> accessor)
+        {
+            if (services.Any(s => s.ServiceType == typeof(ObjectAccessor<T>)))
             {
-                services.AddSingleton<IObjectAccessor<T>>(new ObjectAccessor<T>(obj));
-            }
-            else
-            {
-                var provider = services.BuildServiceProvider();
-                var accessor = provider.GetRequiredService<IObjectAccessor<T>>();
-                accessor.Value = obj;
+                throw new Exception("An object accessor is registered before for type: " + typeof(T).AssemblyQualifiedName);
             }
 
-            return services;
+            services.Insert(0, ServiceDescriptor.Singleton(typeof(ObjectAccessor<T>), accessor));
+            services.Insert(0, ServiceDescriptor.Singleton(typeof(IObjectAccessor<T>), accessor));
+
+            return accessor;
         }
 
-        public static T? GetObjectOrNull<T>(this IServiceCollection services)
-        {
-            var provider = services.BuildServiceProvider();
-            var accessor = provider.GetRequiredService<IObjectAccessor<T>>();
-            return accessor.Value;
-        }
+        //public static IServiceCollection AddObjectAccessor<T>(this IServiceCollection services)
+        //{
+        //    if (!services.Any(s => s.ServiceType == typeof(IObjectAccessor<T>)))
+        //    {
+        //        services.AddSingleton<IObjectAccessor<T>, ObjectAccessor<T>>();
+        //    }
 
-        public static T GetRequiredObject<T>(this IServiceCollection services)
+        //    return services;
+        //}
+
+        //public static IServiceCollection AddObjectAccessor<T>(this IServiceCollection services, T obj)
+        //{
+        //    if (!services.Any(s => s.ServiceType == typeof(IObjectAccessor<T>)))
+        //    {
+        //        services.AddSingleton<IObjectAccessor<T>>(new ObjectAccessor<T>(obj));
+        //    }
+        //    else
+        //    {
+        //        var provider = services.BuildServiceProvider();
+        //        var accessor = provider.GetRequiredService<IObjectAccessor<T>>();
+        //        accessor.Value = obj;
+        //    }
+
+        //    return services;
+        //}
+
+        public static T? GetObjectOrNull<T>(this IServiceCollection services) where T : class
         {
-            var provider = services.BuildServiceProvider();
-            var accessor = provider.GetRequiredService<IObjectAccessor<T>>();
-            return accessor.Value!;
+            return services.GetSingletonInstanceOrNull<ObjectAccessor<T>>()?.Value;
+        }
+        public static T GetObject<T>(this IServiceCollection services) where T : class
+        {
+            return services.GetObjectOrNull<T>() ?? throw new Exception($"Could not find an object of {typeof(T).AssemblyQualifiedName} in services. Be sure that you have used AddObjectAccessor before!");
         }
 
     }
